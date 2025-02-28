@@ -19,7 +19,7 @@ def analyze_directory(directory_path):
 
     return class_counts, image_counts_per_class
 
-def generate_charts(class_counts, image_counts_per_class, directory_name):
+def generate_charts(class_counts, directory_name):
     labels = class_counts.keys()
     sizes = class_counts.values()
 
@@ -39,8 +39,8 @@ def generate_charts(class_counts, image_counts_per_class, directory_name):
 
 def main(directory_path):
     directory_name = os.path.basename(directory_path)
-    class_counts, image_counts_per_class = analyze_directory(directory_path)
-    generate_charts(class_counts, image_counts_per_class, directory_name)
+    class_counts, _ = analyze_directory(directory_path)
+    generate_charts(class_counts, directory_name)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
