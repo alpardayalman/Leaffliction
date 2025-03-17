@@ -2,7 +2,6 @@ import cv2 as cv
 import numpy as np
 import numpy.typing as npt
 import random
-from tqdm import tqdm
 
 
 def scale(img: npt.NDArray) -> npt.NDArray:
