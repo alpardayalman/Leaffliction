@@ -5,6 +5,7 @@ import argparse
 from plantcv import plantcv as pcv
 import matplotlib.pyplot as plt
 
+#baya chatgpt attim duzeltecegim koc
 # Function to apply transformations
 def apply_transformations(image_path, destination_folder):
     image = cv2.imread(image_path)
