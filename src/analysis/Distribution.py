@@ -8,16 +8,13 @@ def analyze_directory(directory_path):
         print(f"Directory {directory_path} does not exist.")
         sys.exit(1)
 
-    subdirectories = [d for d in os.listdir(directory_path) if os.path.isdir(os.path.join(directory_path, d))]
     class_counts = Counter()
-    image_counts_per_class = []
-    for subdirectory in subdirectories:
-        plant_type = subdirectory.split("/")[-1]
-        image_count = len(os.listdir(os.path.join(directory_path, subdirectory)))
-        class_counts[plant_type] += image_count
-        image_counts_per_class.append(image_count)
+    for dirname, _, files in os.walk(directory_path):
+        if len(files) > 0:
+            plant_type = os.path.basename(dirname)
+            class_counts[plant_type] += len(files)
 
-    return class_counts, image_counts_per_class
+    return class_counts
 
 def generate_charts(class_counts, directory_name):
     labels = class_counts.keys()
@@ -39,7 +36,7 @@ def generate_charts(class_counts, directory_name):
 
 def main(directory_path):
     directory_name = os.path.basename(directory_path)
-    class_counts, _ = analyze_directory(directory_path)
+    class_counts = analyze_directory(directory_path)
     generate_charts(class_counts, directory_name)
 
 if __name__ == "__main__":
