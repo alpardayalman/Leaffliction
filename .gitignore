@@ -1,4 +1,6 @@
 *.JPG
+*.jpg
+*.png
 venv
 __pycache__
 *.log

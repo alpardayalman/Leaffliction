@@ -49,7 +49,7 @@ class CustomImageDataset(Dataset):
         label_encoder = LabelEncoder()
         labels = label_encoder.fit_transform(labels)
         labels = torch.from_numpy(labels)
-        
+
         images = pd.DataFrame({"dir": dirnames,
                                "file": filenames})
 

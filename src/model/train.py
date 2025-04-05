@@ -2,9 +2,19 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torch.utils.data import DataLoader
+
 import torchvision.transforms as transforms
 
-from model import CustomImageDataset
+from dataset import CustomImageDataset
+
+from time import time
+from datetime import timedelta
+
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
 
 class Net(nn.Module):
     def __init__(self):
@@ -22,15 +32,29 @@ class Net(nn.Module):
         self.debug = True
 
     def forward(self, x):
-        if self.debug: print('Input', x.shape)  # DEBUG
+        if self.debug:  # DEBUG
+            print('[Debug] Input', x.shape)  # DEBUG
+
         x = F.relu(self.conv1(x))
-        if self.debug: print('Conv1', x.shape)  # DEBUG
+
+        if self.debug:  # DEBUG
+            print('[Debug] Conv1', x.shape)  # DEBUG
+
         x = F.relu(self.conv2(x))
-        if self.debug: print('Conv2', x.shape)  # DEBUG
+
+        if self.debug:  # DEBUG
+            print('[Debug] Conv2', x.shape)  # DEBUG
+
         x = F.relu(self.conv3(x))
-        if self.debug: print('Conv3', x.shape)  # DEBUG
+
+        if self.debug:  # DEBUG
+            print('[Debug] Conv3', x.shape)  # DEBUG
+
         x = F.relu(self.conv4(x))
-        if self.debug: print('Conv4', x.shape)  # DEBUG
+
+        if self.debug:  # DEBUG
+            print('[Debug] Conv4', x.shape, end="\n\n")  # DEBUG
+
         x = torch.flatten(x, 1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
@@ -42,53 +66,80 @@ class Net(nn.Module):
 
         return x
 
-def train_net(net, trainLoader, optimizer, criterion,
-              device=None, epoch=100):
 
-    from time import time
-    from datetime import timedelta
-
-    print('Starting training with', epoch, "number of epoch")
+def train_net(net: nn.Module,
+              trainLoader: DataLoader,
+              validationLoader: DataLoader,
+              optimizer: torch.optim.Optimizer,
+              criterion: nn.modules.loss._Loss,
+              device=None,
+              epochs=100):
+    phases = {"train": trainLoader,
+              "validation": validationLoader}
+    history = {"train_loss": [],
+               "val_loss": []}
 
     start = time()
-    
-    for epoch in range(epoch):
-        running_loss = 0.
-        next_epoch = epoch + 1
-        counter = 0
-        for _, data in enumerate(trainLoader, 0):
-            inputs, labels = data
 
-            if device:
-                inputs = inputs.to(device)
-                labels = labels.to(device)
+    for epoch in range(epochs):
+        train_loss = 0.
+        val_loss = 0.
+        val_total = 0
+        val_correct = 0
 
-            # Zero parameter gradients
-            optimizer.zero_grad()
-            # for param in optimizer.parameters():  # Faster?
-            #     param.grad = None
+        for phase, loader in phases.items():
+            for data in loader:
+                inputs, labels = data
 
-            # forward + backward + optimization
-            outputs = net(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+                if device:
+                    inputs = inputs.to(device)
+                    labels = labels.to(device)
 
-            if epoch == next_epoch:
-                print(f"[{epoch:3d}] "
-                      f"loss: {running_loss / counter:.3f} "
-                      f"counter: {counter}")
-                running_loss = 0.
-                counter = 0
+                if phase == "train":
+                    net.train()
+                    optimizer.zero_grad()
+                elif phase == "validation":
+                    net.eval()
+                else:
+                    raise NotImplementedError(f"unimplemented phase {phase}")
 
-            counter += 1
-            running_loss += loss.item()
-            # loss_history.append(loss.item())
+                # forward + backward + optimization
+                outputs = net(inputs)
+                loss = criterion(outputs, labels)
+
+                if phase == "train":
+                    loss.backward()
+                    optimizer.step()
+                    train_loss += loss.item()
+                elif phase == "validation":
+                    val_loss += loss.item()
+                    _, predicted = torch.max(outputs, 1)
+                    val_total += labels.size(0)
+                    val_correct += (predicted == labels).sum().item()
+
+                # loss_history.append(loss.item())
+
+        train_loss /= len(trainLoader.dataset)
+        val_loss /= len(validationLoader.dataset)
+        val_acc = val_correct / val_total
+
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(val_loss)
+
+        print(f"[epoch {epoch+1:03d}] "
+              f"train_loss: {train_loss:.5f} "
+              f"val_loss: {val_loss:.5f} "
+              f"val_acc: {val_acc:.2%}")
 
     end = time()
-    
+
     print("Training is finished.")
     print("Elapsed time :", timedelta(seconds=(end - start)))
+
+    history |= {"epoch": range(1, epochs + 1)}
+
+    return pd.DataFrame(history).set_index("epoch")
+
 
 def test_net(net, testLoader, device=None):
     correct = 0
@@ -101,7 +152,7 @@ def test_net(net, testLoader, device=None):
             if device:
                 images = images.to(device)
                 labels = labels.to(device)
-            
+
             outputs = net(images)
             _, predicted = torch.max(outputs, 1)
             total += labels.size(0)
@@ -109,6 +160,7 @@ def test_net(net, testLoader, device=None):
 
     print(f"Accuracy of the network on {total} "
           f"test images: {100 * correct // total}%")
+
 
 def main():
 
@@ -119,34 +171,71 @@ def main():
 
     device = torch.accelerator.current_accelerator().type \
         if torch.accelerator.is_available() \
-           else "cpu"
-    print(f"Using {device} device")
+        else "cpu"
 
     data = CustomImageDataset("/home/timur/workspace/test/images",
                               transform=transform)
 
+    batch_size = 64
+    num_workers = 4
+    epochs = 20
+    train_test_split = [.8, .2]
+    learning_rate = 0.001
+
     gen = torch.Generator().manual_seed(40)
     train, test = torch.utils.data.random_split(data,
-                                                [.8, .2],
+                                                train_test_split,
                                                 generator=gen)
 
-    batch_size = 64
-    
-    trainLoader = torch.utils.data.DataLoader(train,
-                                              batch_size=batch_size,
-                                              shuffle=True,
-                                              num_workers=3)
-    testLoader = torch.utils.data.DataLoader(test,
-                                             batch_size=32,
-                                             shuffle=True)
+    print("          Dataset Info           ",
+          "=================================",
+          f"Training   set size : {len(train):10} ({train_test_split[0]:.0%})",
+          f"Validation set size : {len(test):10} ({train_test_split[1]:.0%})",
+          f"Total               : {len(data):10}",
+          sep="\n", end="\n\n")
+
+    print("          Training Info          ",
+          "=================================",
+          f"Device              : {device}",
+          f"Learning rate       : {learning_rate}",
+          f"Batch size          : {batch_size}",
+          f"Epochs              : {epochs}",
+          "Optimizer           : Adam",
+          "Loss                : Cross Entropy",
+          sep="\n", end="\n\n")
+
+    trainLoader = DataLoader(train, shuffle=True,
+                             batch_size=batch_size,
+                             num_workers=num_workers)
+
+    testLoader = DataLoader(test, shuffle=True,
+                            batch_size=batch_size,
+                            num_workers=num_workers)
 
     net = Net().to(device)
-    print(net)
+    print(net, end="\n\n")
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(net.parameters(), lr=0.01)
+    optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
 
-    train_net(net, trainLoader, optimizer, criterion, device=device, epoch=100)
+    history = train_net(net,
+                        trainLoader,
+                        testLoader,
+                        optimizer,
+                        criterion,
+                        device=device,
+                        epochs=epochs)
+
+    plt.rcParams.update({"font.size": 12})
+    fig = plt.figure(figsize=(8, 6))
+
+    sns.lineplot(data=history, x="epoch", y="train_loss", label="Training")
+    sns.lineplot(data=history, x="epoch", y="val_loss", label="Validation")
+
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    fig.tight_layout()
+    fig.savefig("loss.figure.png")
 
     torch.save(net.state_dict(), "mytestmodel.pth")
 
