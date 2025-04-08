@@ -1,163 +1,19 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
 from torch.utils.data import DataLoader
 
-import torchvision.transforms as transforms
-
-from dataset import CustomImageDataset
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 from time import time
 from datetime import timedelta
 
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-
-
-class Net(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.pool = nn.MaxPool2d(3, 2)
-        self.conv1 = nn.Conv2d(3, 12, 3, stride=2)
-        self.norm1 = nn.BatchNorm2d(12)
-        self.conv2 = nn.Conv2d(12, 12, 3, stride=2)
-        self.norm2 = nn.BatchNorm2d(12)
-        self.fc1 = nn.Linear(12 * 15 * 15, 10)
-        self.fc2 = nn.Linear(10, 10)
-        self.fc3 = nn.Linear(10, 8)
-
-        self.debug = True
-
-    def forward(self, x):
-        if self.debug:  # DEBUG
-            print('[Debug] Input', x.shape)  # DEBUG
-
-        x = self.pool(self.conv1(x))
-        x = F.relu(self.norm1(x))
-
-        if self.debug:  # DEBUG
-            print('[Debug] Conv1', x.shape)  # DEBUG
-
-        x = self.pool(self.conv2(x))
-        x = F.relu(self.norm2(x))
-
-        if self.debug:  # DEBUG
-            print('[Debug] Conv2', x.shape, end="\n\n")  # DEBUG
-
-        x = torch.flatten(x, 1)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-
-        if self.debug:
-            self.debug = False
-
-        return x
-
-
-def train_net(net: nn.Module,
-              trainLoader: DataLoader,
-              validationLoader: DataLoader,
-              optimizer: torch.optim.Optimizer,
-              criterion: nn.modules.loss._Loss,
-              device=None,
-              epochs=100):
-    phases = {"train": trainLoader,
-              "validation": validationLoader}
-    history = {"train_loss": [],
-               "val_loss": []}
-
-    start = time()
-
-    for epoch in range(epochs):
-        train_loss = 0.
-        val_loss = 0.
-        val_total = 0
-        val_correct = 0
-
-        for phase, loader in phases.items():
-            for data in loader:
-                inputs, labels = data
-
-                if device:
-                    inputs = inputs.to(device)
-                    labels = labels.to(device)
-
-                if phase == "train":
-                    net.train()
-                    optimizer.zero_grad()
-                elif phase == "validation":
-                    net.eval()
-                else:
-                    raise NotImplementedError(f"unimplemented phase {phase}")
-
-                # forward + backward + optimization
-                outputs = net(inputs)
-                loss = criterion(outputs, labels)
-
-                if phase == "train":
-                    loss.backward()
-                    optimizer.step()
-                    train_loss += loss.item()
-                elif phase == "validation":
-                    val_loss += loss.item()
-                    _, predicted = torch.max(outputs, 1)
-                    val_total += labels.size(0)
-                    val_correct += (predicted == labels).sum().item()
-
-                # loss_history.append(loss.item())
-
-        train_loss /= len(trainLoader.dataset)
-        val_loss /= len(validationLoader.dataset)
-        val_acc = val_correct / val_total
-
-        history["train_loss"].append(train_loss)
-        history["val_loss"].append(val_loss)
-
-        print(f"[epoch {epoch+1:03d}] "
-              f"train_loss: {train_loss:.5f} "
-              f"val_loss: {val_loss:.5f} "
-              f"val_acc: {val_acc:.2%}")
-
-    end = time()
-
-    print("Training is finished.")
-    print("Elapsed time :", timedelta(seconds=(end - start)))
-
-    history |= {"epoch": range(1, epochs + 1)}
-
-    return pd.DataFrame(history).set_index("epoch")
-
-
-def test_net(net, testLoader, device=None):
-    correct = 0
-    total = 0
-
-    with torch.no_grad():
-        for data in testLoader:
-            images, labels = data
-
-            if device:
-                images = images.to(device)
-                labels = labels.to(device)
-
-            outputs = net(images)
-            _, predicted = torch.max(outputs, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-
-    print(f"Accuracy of the network on {total} "
-          f"test images: {100 * correct // total}%")
+from dataset import CustomImageDataset, save_encoder, transform_scheme1
+from network import Net, train_net, test_net
 
 
 def main():
-
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((.5, .5, .5), (.5, .5, .5))
-    ])
+    transform = transform_scheme1()
 
     device = torch.accelerator.current_accelerator().type \
         if torch.accelerator.is_available() \
@@ -165,6 +21,8 @@ def main():
 
     data = CustomImageDataset("/home/timur/workspace/test/images",
                               transform=transform)
+
+    save_encoder("label.encoder.npy", data.label_encoder)
 
     batch_size = 64
     num_workers = 4
@@ -208,6 +66,7 @@ def main():
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(net.parameters(), lr=learning_rate)
 
+    start = time()
     history = train_net(net,
                         trainLoader,
                         testLoader,
@@ -215,6 +74,11 @@ def main():
                         criterion,
                         device=device,
                         epochs=epochs)
+    end = time()
+
+    print()
+    print("Training is finished.")
+    print("Elapsed time :", timedelta(seconds=(end - start)))
 
     plt.rcParams.update({"font.size": 12})
     fig = plt.figure(figsize=(8, 6))
@@ -227,9 +91,13 @@ def main():
     fig.tight_layout()
     fig.savefig("loss.figure.png")
 
-    torch.save(net.state_dict(), "mytestmodel.pth")
+    torch.save(net.state_dict(), "model.pth")
 
-    test_net(net, testLoader, device=device)
+    result = test_net(net, testLoader, device=device)
+
+    print()
+    print(f"Accuracy of the network on {result['total']} "
+          f"test images: {result['correct'] / result['total']:.2%}")
 
 
 if __name__ == "__main__":

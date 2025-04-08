@@ -5,10 +5,46 @@ import torch
 from torch.utils.data import Dataset
 from sklearn.preprocessing import LabelEncoder
 
+from numpy import typing as npt
+import numpy as np
+
+import torchvision.transforms as transforms
+
 
 class CustomImageDataset(Dataset):
-    def __init__(self, parent_dir, transform=None, target_transform=None):
-        images, labels, label_encoder = self.annotate(parent_dir)
+    """A Dataset class tailored for loading image files"""
+    def __init__(self, parent_dir,
+                 transform=None, target_transform=None,
+                 label_encoder: LabelEncoder | None = None):
+        """Initialize a dataset of images categorized by subdirectories
+
+        Positional Arguments:
+        parent_dir       -- path to parent directory of image files
+
+        Keyword Arguments:
+        transform        -- function to transform input data
+        target_transform -- function to transform label data
+        label_encoder    -- predefined label_encoder
+
+
+        Augmented data can be specified in separate subdirectories,
+        for instance:
+        "
+        images/
+        ├── Apple_Black_rot
+        ├── Apple_healthy
+        ├── Apple_rust
+        ├── Apple_scab
+        ├── augmentation
+        │    ├── Apple_Black_rot
+        │    ├── Apple_healthy
+        │    ├── Apple_rust
+        │    └── Apple_scab
+        ...
+        "
+        """
+        images, labels, label_encoder = self.annotate(parent_dir,
+                                                      label_encoder)
         self.images = images
         self.labels = labels
         self.label_encoder = label_encoder
@@ -36,7 +72,10 @@ class CustomImageDataset(Dataset):
         return img, label
 
     @staticmethod
-    def annotate(parent_dir):
+    def annotate(parent_dir, label_encoder) -> tuple[pd.DataFrame,
+                                                     torch.Tensor,
+                                                     LabelEncoder]:
+        """Return path, label and label encoder information of image files"""
         dirnames = []
         filenames = []
         labels = []
@@ -46,8 +85,12 @@ class CustomImageDataset(Dataset):
                 filenames.append(f)
                 labels.append(os.path.basename(dirname))
 
-        label_encoder = LabelEncoder()
-        labels = label_encoder.fit_transform(labels)
+        if label_encoder is None:
+            label_encoder = LabelEncoder()
+            labels = label_encoder.fit_transform(labels)
+        else:
+            labels = label_encoder.transform(labels)
+
         labels = torch.from_numpy(labels)
 
         images = pd.DataFrame({"dir": dirnames,
@@ -56,3 +99,32 @@ class CustomImageDataset(Dataset):
         images["dir"] = images["dir"].astype("category")
 
         return images, labels, label_encoder
+
+
+def save_encoder(path, encoder: LabelEncoder | npt.ArrayLike):
+    """Save label encoder to a file"""
+    if isinstance(encoder, LabelEncoder):
+        if hasattr(encoder, "classes_") \
+           and isinstance(encoder.classes_, np.ndarray):
+            encoder = encoder.classes_
+        else:
+            raise AssertionError("encoder is not fit")
+
+    np.save(path, encoder)
+
+
+def load_encoder(path) -> LabelEncoder:
+    """Load label encoder from a file"""
+    array = np.load(path)
+    encoder = LabelEncoder()
+    encoder.fit(np.array(array))
+
+    return encoder
+
+
+def transform_scheme1() -> transforms.Compose:
+    """The simplest predefined input transformation scheme"""
+    return transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((.5, .5, .5), (.5, .5, .5))
+    ])
