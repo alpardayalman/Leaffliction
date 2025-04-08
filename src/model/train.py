@@ -19,15 +19,14 @@ import matplotlib.pyplot as plt
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
-        # self.pool = nn.MaxPool2d(2, 2)
+        self.pool = nn.MaxPool2d(3, 2)
         self.conv1 = nn.Conv2d(3, 12, 3, stride=2)
-        self.conv2 = nn.Conv2d(12, 10, 3, stride=2)
-        self.conv3 = nn.Conv2d(10, 10, 3, stride=2)
-        self.conv4 = nn.Conv2d(10, 10, 3, stride=2)
-        self.fc1 = nn.Linear(10 * 15 * 15, 100)
-        self.fc2 = nn.Linear(100, 50)
-        self.fc3 = nn.Linear(50, 50)
-        self.fc4 = nn.Linear(50, 8)
+        self.norm1 = nn.BatchNorm2d(12)
+        self.conv2 = nn.Conv2d(12, 12, 3, stride=2)
+        self.norm2 = nn.BatchNorm2d(12)
+        self.fc1 = nn.Linear(12 * 15 * 15, 10)
+        self.fc2 = nn.Linear(10, 10)
+        self.fc3 = nn.Linear(10, 8)
 
         self.debug = True
 
@@ -35,31 +34,22 @@ class Net(nn.Module):
         if self.debug:  # DEBUG
             print('[Debug] Input', x.shape)  # DEBUG
 
-        x = F.relu(self.conv1(x))
+        x = self.pool(self.conv1(x))
+        x = F.relu(self.norm1(x))
 
         if self.debug:  # DEBUG
             print('[Debug] Conv1', x.shape)  # DEBUG
 
-        x = F.relu(self.conv2(x))
+        x = self.pool(self.conv2(x))
+        x = F.relu(self.norm2(x))
 
         if self.debug:  # DEBUG
-            print('[Debug] Conv2', x.shape)  # DEBUG
-
-        x = F.relu(self.conv3(x))
-
-        if self.debug:  # DEBUG
-            print('[Debug] Conv3', x.shape)  # DEBUG
-
-        x = F.relu(self.conv4(x))
-
-        if self.debug:  # DEBUG
-            print('[Debug] Conv4', x.shape, end="\n\n")  # DEBUG
+            print('[Debug] Conv2', x.shape, end="\n\n")  # DEBUG
 
         x = torch.flatten(x, 1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        x = self.fc4(x)
+        x = self.fc3(x)
 
         if self.debug:
             self.debug = False
@@ -178,9 +168,9 @@ def main():
 
     batch_size = 64
     num_workers = 4
-    epochs = 20
+    epochs = 50
     train_test_split = [.8, .2]
-    learning_rate = 0.001
+    learning_rate = 5e-2
 
     gen = torch.Generator().manual_seed(40)
     train, test = torch.utils.data.random_split(data,
@@ -200,7 +190,7 @@ def main():
           f"Learning rate       : {learning_rate}",
           f"Batch size          : {batch_size}",
           f"Epochs              : {epochs}",
-          "Optimizer           : Adam",
+          "Optimizer           : Gradient Descent",
           "Loss                : Cross Entropy",
           sep="\n", end="\n\n")
 
@@ -216,7 +206,7 @@ def main():
     print(net, end="\n\n")
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
+    optimizer = torch.optim.SGD(net.parameters(), lr=learning_rate)
 
     history = train_net(net,
                         trainLoader,
