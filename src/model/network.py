@@ -1,3 +1,4 @@
+from sklearn.preprocessing import LabelEncoder
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -5,6 +6,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 import pandas as pd
+import numpy as np
 
 
 class Net(nn.Module):
@@ -119,10 +121,14 @@ def train_net(net: nn.Module,
     return pd.DataFrame(history).set_index("epoch")
 
 
-def test_net(net, testLoader, device=None) -> dict:
-    """Report overall accuracy of a model against a test dataset"""
-    correct = 0
-    total = 0
+def test_net(net,
+             testLoader: DataLoader,
+             encoder: LabelEncoder,
+             device=None) -> pd.DataFrame:
+    """Return predictions of a model against a test dataset"""
+    all_outputs = np.array([]).reshape(-1, len(encoder.classes_))
+    all_predictions = np.array([])
+    all_labels = np.array([])
 
     with torch.no_grad():
         for data in testLoader:
@@ -133,11 +139,19 @@ def test_net(net, testLoader, device=None) -> dict:
                 labels = labels.to(device)
 
             outputs = net(images)
-            _, predicted = torch.max(outputs, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+            outputs = torch.nn.functional.softmax(outputs, dim=1)
 
-    # TODO: improve return value to report accuracy per class
+            _, predictions = torch.max(outputs, 1)
 
-    return {"correct": correct,
-            "total": total}
+            all_outputs = np.concatenate((all_outputs,
+                                          outputs.cpu().detach()))
+            all_predictions = np.concatenate((all_predictions,
+                                              predictions.cpu()))
+            all_labels = np.concatenate((all_labels,
+                                         labels.cpu()))
+
+    result = pd.DataFrame(all_outputs, columns=encoder.classes_)
+    result["prediction"] = pd.Series(all_predictions).astype("category")
+    result["label"] = pd.Series(all_labels).astype("category")
+
+    return result

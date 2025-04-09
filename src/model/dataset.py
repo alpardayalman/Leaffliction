@@ -100,6 +100,13 @@ class CustomImageDataset(Dataset):
 
         return images, labels, label_encoder
 
+    @staticmethod
+    def transform_scheme(scheme) -> transforms.Compose | None:
+        """Return a predefined input transformation scheme"""
+        return {
+            "scheme1": transform_scheme1()
+        }.get(scheme)
+
 
 def save_encoder(path, encoder: LabelEncoder | npt.ArrayLike):
     """Save label encoder to a file"""

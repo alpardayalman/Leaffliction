@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from time import time
 from datetime import timedelta
 
-from dataset import CustomImageDataset, save_encoder, transform_scheme1
+from dataset import CustomImageDataset, save_encoder
 from network import Net, train_net, test_net
 
 import os
@@ -34,7 +34,7 @@ def _parse_cmd_arguments():
         description="Train Custom Model for Leaffliction Project"
     )
 
-    parser.add_argument("image_dir")
+    parser.add_argument("--input-path", "-i", required=True)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--validation-split", type=float, default=.2)
@@ -75,11 +75,11 @@ def main():
     args = _parse_cmd_arguments()
 
     device = args.device
-    transform = {
-        "scheme1": transform_scheme1()
-    }.get(args.transformation_scheme)
+    transform = CustomImageDataset.transform_scheme(
+        args.transformation_scheme
+    )
 
-    data = CustomImageDataset(args.image_dir,
+    data = CustomImageDataset(args.input_path,
                               transform=transform)
 
     if not os.path.exists(args.output_dir):
@@ -144,11 +144,12 @@ def main():
     torch.save(net.state_dict(),
                os.path.join(args.output_dir, "model.pth"))
 
-    result = test_net(net, testLoader, device=device)
+    result = test_net(net, testLoader, data.label_encoder, device=device)
+    accuracy = (result["prediction"] == result["label"]).sum() / len(result)
 
     print()
-    print(f"Accuracy of the network on {result['total']} "
-          f"test images: {result['correct'] / result['total']:.2%}")
+    print(f"Accuracy of the network on {len(result)} "
+          f"test images: {accuracy:.2%}")
 
     save_history_plot(os.path.join(args.output_dir, "loss.figure.png"),
                       history)
