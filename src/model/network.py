@@ -151,7 +151,15 @@ def test_net(net,
                                          labels.cpu()))
 
     result = pd.DataFrame(all_outputs, columns=encoder.classes_)
-    result["prediction"] = pd.Series(all_predictions).astype("category")
-    result["label"] = pd.Series(all_labels).astype("category")
+
+    all_predictions = encoder.inverse_transform(all_predictions.astype(int))
+    all_labels = encoder.inverse_transform(all_labels.astype(int))
+
+    categories = sorted(set(all_predictions) | set(all_labels))
+
+    result["prediction"] = pd.Categorical(all_predictions,
+                                          categories=categories)
+    result["label"] = pd.Categorical(all_labels,
+                                     categories=categories)
 
     return result
