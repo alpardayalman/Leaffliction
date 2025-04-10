@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from time import time
 from datetime import timedelta
 
-from dataset import CustomImageDataset, save_encoder
+from dataset import CustomImageDataset, save_classes
 from network import Net, train_net, test_net
 
 import os
@@ -85,8 +85,8 @@ def main():
     if not os.path.exists(args.output_dir):
         os.mkdir(args.output_dir)
 
-    save_encoder(os.path.join(args.output_dir, "label.encoder.npy"),
-                 data.label_encoder)
+    save_classes(os.path.join(args.output_dir, "classes.json"),
+                 data.classes)
 
     train_test_split = (1. - args.validation_split,
                         args.validation_split)
@@ -144,7 +144,7 @@ def main():
     torch.save(net.state_dict(),
                os.path.join(args.output_dir, "model.pth"))
 
-    result = test_net(net, testLoader, data.label_encoder, device=device)
+    result = test_net(net, testLoader, data.classes, device=device)
     accuracy = (result["prediction"] == result["label"]).sum() / len(result)
 
     print()

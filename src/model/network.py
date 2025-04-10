@@ -1,4 +1,3 @@
-from sklearn.preprocessing import LabelEncoder
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -123,10 +122,10 @@ def train_net(net: nn.Module,
 
 def test_net(net,
              testLoader: DataLoader,
-             encoder: LabelEncoder,
+             classes: list[str],
              device=None) -> pd.DataFrame:
     """Return predictions of a model against a test dataset"""
-    all_outputs = np.array([]).reshape(-1, len(encoder.classes_))
+    all_outputs = None
     all_predictions = np.array([])
     all_labels = np.array([])
 
@@ -143,23 +142,29 @@ def test_net(net,
 
             _, predictions = torch.max(outputs, 1)
 
-            all_outputs = np.concatenate((all_outputs,
-                                          outputs.cpu().detach()))
+            outputs = outputs.cpu().detach().numpy()
+
+            if all_outputs is None:
+                all_outputs = outputs
+            else:
+                all_outputs = np.concatenate((all_outputs,
+                                              outputs))
+
             all_predictions = np.concatenate((all_predictions,
                                               predictions.cpu()))
             all_labels = np.concatenate((all_labels,
                                          labels.cpu()))
 
-    result = pd.DataFrame(all_outputs, columns=encoder.classes_)
+    result = pd.DataFrame(all_outputs,
+                          columns=classes[0:all_outputs.shape[1]])
 
-    all_predictions = encoder.inverse_transform(all_predictions.astype(int))
-    all_labels = encoder.inverse_transform(all_labels.astype(int))
-
-    categories = sorted(set(all_predictions) | set(all_labels))
-
-    result["prediction"] = pd.Categorical(all_predictions,
-                                          categories=categories)
-    result["label"] = pd.Categorical(all_labels,
-                                     categories=categories)
+    result["prediction"] = pd.Categorical.from_codes(
+        all_predictions.astype(int),
+        categories=classes
+    )
+    result["label"] = pd.Categorical.from_codes(
+        all_labels.astype(int),
+        categories=classes
+    )
 
     return result

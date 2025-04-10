@@ -1,12 +1,9 @@
 import os
+import json
 import pandas as pd
 import cv2 as cv
 import torch
 from torch.utils.data import Dataset
-from sklearn.preprocessing import LabelEncoder
-
-from numpy import typing as npt
-import numpy as np
 
 import torchvision.transforms as transforms
 
@@ -15,7 +12,7 @@ class CustomImageDataset(Dataset):
     """A Dataset class tailored for loading image files"""
     def __init__(self, parent_dir,
                  transform=None, target_transform=None,
-                 label_encoder: LabelEncoder | None = None):
+                 classes: list[str] | None = None):
         """Initialize a dataset of images categorized by subdirectories
 
         Positional Arguments:
@@ -43,11 +40,10 @@ class CustomImageDataset(Dataset):
         ...
         "
         """
-        images, labels, label_encoder = self.annotate(parent_dir,
-                                                      label_encoder)
+        images, labels, classes = self.annotate(parent_dir, classes)
         self.images = images
         self.labels = labels
-        self.label_encoder = label_encoder
+        self.classes = classes
         self.transform = transform
         self.target_transform = target_transform
 
@@ -72,10 +68,11 @@ class CustomImageDataset(Dataset):
         return img, label
 
     @staticmethod
-    def annotate(parent_dir, label_encoder) -> tuple[pd.DataFrame,
-                                                     torch.Tensor,
-                                                     LabelEncoder]:
-        """Return path, label and label encoder information of image files"""
+    def annotate(parent_dir,
+                 classes: list[str] | None = None) -> tuple[pd.DataFrame,
+                                                            torch.Tensor,
+                                                            list[str]]:
+        """Return path, label and class information of image files"""
         dirnames = []
         filenames = []
         labels = []
@@ -85,20 +82,22 @@ class CustomImageDataset(Dataset):
                 filenames.append(f)
                 labels.append(os.path.basename(dirname))
 
-        if label_encoder is None:
-            label_encoder = LabelEncoder()
-            labels = label_encoder.fit_transform(labels)
-        else:
-            labels = label_encoder.transform(labels)
+        if classes:
+            new = [lab for lab in set(labels) if lab not in classes]
+            if new:
+                print("Appending new classes:", new)
+                classes.extend(new)
 
-        labels = torch.from_numpy(labels)
+        labels = pd.Categorical(labels, categories=classes)
+        classes = labels.categories.tolist()
+        labels = torch.from_numpy(labels.codes.astype("int64"))
 
         images = pd.DataFrame({"dir": dirnames,
                                "file": filenames})
 
         images["dir"] = images["dir"].astype("category")
 
-        return images, labels, label_encoder
+        return images, labels, classes
 
     @staticmethod
     def transform_scheme(scheme) -> transforms.Compose | None:
@@ -108,25 +107,17 @@ class CustomImageDataset(Dataset):
         }.get(scheme)
 
 
-def save_encoder(path, encoder: LabelEncoder | npt.ArrayLike):
-    """Save label encoder to a file"""
-    if isinstance(encoder, LabelEncoder):
-        if hasattr(encoder, "classes_") \
-           and isinstance(encoder.classes_, np.ndarray):
-            encoder = encoder.classes_
-        else:
-            raise AssertionError("encoder is not fit")
-
-    np.save(path, encoder)
+def save_classes(path, classes: list[str]):
+    """Save categories to a file"""
+    with open(path, "w") as file:
+        json.dump(classes, file)
 
 
-def load_encoder(path) -> LabelEncoder:
-    """Load label encoder from a file"""
-    array = np.load(path)
-    encoder = LabelEncoder()
-    encoder.fit(np.array(array))
-
-    return encoder
+def load_classes(path) -> list[str]:
+    """Load categories from a file"""
+    with open(path, "r") as file:
+        data = json.load(file)
+        return data
 
 
 def transform_scheme1() -> transforms.Compose:
