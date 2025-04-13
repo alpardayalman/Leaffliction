@@ -31,7 +31,9 @@ def get_image_embedding(image_path):
 
 df = pd.read_csv('image_embeddings.csv')
 image_paths = df['Image Path'].tolist()
-embeddings = np.array(df['Embedding'].apply(lambda x: np.fromstring(x[1:-1], sep=',')).tolist())
+embeddings = np.array(
+    df['Embedding'].apply(lambda x: np.fromstring(x[1:-1], sep=',')).tolist())
+
 
 def search_similar_images(query_embedding, embeddings, image_paths, k=5):
     similarities = cosine_similarity([query_embedding], embeddings)
@@ -45,7 +47,8 @@ def search_similar_images(query_embedding, embeddings, image_paths, k=5):
 st.title('Image Retrieval with Brute Force Search')
 st.write("Upload an image to search for similar images.")
 
-uploaded_image = st.file_uploader("Choose an image", type=["jpg", "png", "jpeg"])
+uploaded_image = st.file_uploader(
+    "Choose an image", type=["jpg", "png", "jpeg"])
 
 if uploaded_image is not None:
     query_image = Image.open(uploaded_image).convert("RGB")
@@ -54,12 +57,16 @@ if uploaded_image is not None:
     query_embedding = get_image_embedding(uploaded_image)
 
     k = 6
-    top_k_image_paths, top_k_distances = search_similar_images(query_embedding, embeddings, image_paths, k)
+    top_k_image_paths, kd = search_similar_images(
+        query_embedding, embeddings, image_paths, k)
 
     st.write(f"Top {k} similar images:")
 
-    for i in range(1,k):
+    for i in range(1, k):
         image_path = top_k_image_paths[i]
-        folder_name = os.path.basename(os.path.dirname(image_path))
+        fn = os.path.basename(os.path.dirname(image_path))
         if image_path != uploaded_image.name:
-            st.image(image_path, caption=f"Folder: {folder_name} | Similar Image {i+1} (Distance: {top_k_distances[i]:.2f})", use_container_width=True)
+            a = f"Folder: {fn} | Similar Image {i+1} (Distance: {kd[i]:.2f})"
+            st.image(image_path,
+                     caption=a,
+                     use_container_width=True)
