@@ -56,7 +56,7 @@ def _parse_cmd_arguments(arguments=None):
 
 def _test_from_args(args):
     net = Net().to(args.device)
-    net.load_state_dict(torch.load(args.model_path, weights_only=True))
+    net.load_state_dict(torch.load(args.model_path, map_location=args.device, weights_only=True))
 
     if args.class_path:
         classes = load_classes(args.class_path)
