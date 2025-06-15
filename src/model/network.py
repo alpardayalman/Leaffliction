@@ -12,14 +12,12 @@ class Net(nn.Module):
     """A custom neural network tailored for Leaffliction project"""
     def __init__(self):
         super().__init__()
-        self.pool = nn.MaxPool2d(3, 2)
-        self.conv1 = nn.Conv2d(3, 12, 3, stride=2)
-        self.norm1 = nn.BatchNorm2d(12)
-        self.conv2 = nn.Conv2d(12, 12, 3, stride=2)
-        self.norm2 = nn.BatchNorm2d(12)
-        self.fc1 = nn.Linear(12 * 15 * 15, 10)
-        self.fc2 = nn.Linear(10, 10)
-        self.fc3 = nn.Linear(10, 8)
+        self.pool = nn.MaxPool2d(3, 3)
+        self.conv1 = nn.Conv2d(3, 6, 3, stride=2)
+        self.conv2 = nn.Conv2d(6, 12, 3, stride=2)
+        self.fc1 = nn.Linear(12 * 6 * 6, 10)
+        self.fc2 = nn.Linear(10, 100)
+        self.fc3 = nn.Linear(100, 8)
 
         self.debug = True
 
@@ -28,13 +26,13 @@ class Net(nn.Module):
             print('[Debug] Input', x.shape)  # DEBUG
 
         x = self.pool(self.conv1(x))
-        x = F.relu(self.norm1(x))
+        x = F.relu(x)
 
         if self.debug:  # DEBUG
             print('[Debug] Conv1', x.shape)  # DEBUG
 
         x = self.pool(self.conv2(x))
-        x = F.relu(self.norm2(x))
+        x = F.relu(x)
 
         if self.debug:  # DEBUG
             print('[Debug] Conv2', x.shape, end="\n\n")  # DEBUG
@@ -71,6 +69,7 @@ def train_net(net: nn.Module,
         val_correct = 0
 
         for phase, loader in phases.items():
+            n_samples = 0
             for data in loader:
                 inputs, labels = data
 
@@ -87,24 +86,36 @@ def train_net(net: nn.Module,
                     raise NotImplementedError(f"unimplemented phase {phase}")
 
                 # forward + backward + optimization
-                outputs = net(inputs)
-                loss = criterion(outputs, labels)
-
                 if phase == "train":
+                    outputs = net(inputs)
+                    loss = criterion(outputs, labels)
+
+                    batch_size = inputs.size(0)
+                    n_samples += batch_size
+
                     loss.backward()
                     optimizer.step()
-                    train_loss += loss.item()
+                    train_loss += loss.item() * batch_size
+
                 elif phase == "validation":
-                    val_loss += loss.item()
-                    _, predicted = torch.max(outputs, 1)
-                    val_total += labels.size(0)
-                    val_correct += (predicted == labels).sum().item()
+                    with torch.no_grad():
+                        outputs = net(inputs)
+                        loss = criterion(outputs, labels)
+
+                        batch_size = inputs.size(0)
+                        n_samples += batch_size
+
+                        val_loss += loss.item()
+                        _, predicted = torch.max(outputs, 1)
+                        val_total += labels.size(0)
+                        val_correct += (predicted == labels).sum().item()
 
                 # loss_history.append(loss.item())
-
-        train_loss /= len(trainLoader.dataset)
-        val_loss /= len(validationLoader.dataset)
-        val_acc = val_correct / val_total
+            if phase == "train":
+                train_loss /= n_samples
+            elif phase == "validation":
+                val_loss /= n_samples
+                val_acc = val_correct / val_total
 
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_loss)
@@ -128,6 +139,9 @@ def test_net(net,
     all_outputs = None
     all_predictions = np.array([])
     all_labels = np.array([])
+
+    recover_training = net.training
+    net.eval()
 
     with torch.no_grad():
         for data in testLoader:
@@ -166,5 +180,8 @@ def test_net(net,
         all_labels.astype(int),
         categories=classes
     )
+
+    if recover_training:
+        net.train()
 
     return result

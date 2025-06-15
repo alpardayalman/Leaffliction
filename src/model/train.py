@@ -103,8 +103,8 @@ def main():
 
     print("          Dataset Info           ",
           "=================================",
-          f"Training   set size : {len(train):10})",
-          f"Validation set size : {len(test):10})",
+          f"Training   set size : {len(train):10}",
+          f"Validation set size : {len(test):10}",
           f"Total               : {len(data):10}",
           sep="\n", end="\n\n")
 
