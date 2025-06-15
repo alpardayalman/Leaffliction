@@ -100,7 +100,7 @@ class CustomImageDataset(Dataset):
         return images, labels, classes
 
     @staticmethod
-    def transform_scheme(scheme) -> transforms.Compose | None:
+    def transform_scheme(scheme: str) -> transforms.Compose | None:
         """Return a predefined input transformation scheme"""
         return {
             "scheme1": transform_scheme1()

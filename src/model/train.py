@@ -34,17 +34,18 @@ def _parse_cmd_arguments():
         description="Train Custom Model for Leaffliction Project"
     )
 
-    parser.add_argument("--input-path", "-i", required=True)
+    parser.add_argument("--training-set", required=True)
+    parser.add_argument("--validation-set", default=None)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--epochs", type=int, default=50)
-    parser.add_argument("--validation-split", type=float, default=.2)
+    parser.add_argument("--validation-split", type=float, default=.2,
+                        help="Splits training set into training-test sets "
+                        "if validation-set arg is not provided")
     parser.add_argument("--learning-rate", "--lr", type=float, default=5e-2)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--output-dir", "--dst", default="output")
     parser.add_argument("--device", default=_get_device(),
                         choices=_available_devices())
-    parser.add_argument("--transformation-scheme", default="scheme1",
-                        choices=["scheme1"])
 
     # No args for loss function and optimizer
 
@@ -76,10 +77,10 @@ def main():
 
     device = args.device
     transform = CustomImageDataset.transform_scheme(
-        args.transformation_scheme
+        "scheme1"
     )
 
-    data = CustomImageDataset(args.input_path,
+    data = CustomImageDataset(args.training_set,
                               transform=transform)
 
     if not os.path.exists(args.output_dir):
@@ -88,18 +89,22 @@ def main():
     save_classes(os.path.join(args.output_dir, "classes.json"),
                  data.classes)
 
-    train_test_split = (1. - args.validation_split,
-                        args.validation_split)
-
-    gen = torch.Generator().manual_seed(40)
-    train, test = torch.utils.data.random_split(data,
-                                                train_test_split,
-                                                generator=gen)
+    if args.validation_set is not None:
+        train = data
+        test = CustomImageDataset(args.validation_set,
+                                  transform=transform)
+    else:
+        train_test_split = (1. - args.validation_split,
+                            args.validation_split)
+        gen = torch.Generator().manual_seed(40)
+        train, test = torch.utils.data.random_split(data,
+                                                    train_test_split,
+                                                    generator=gen)
 
     print("          Dataset Info           ",
           "=================================",
-          f"Training   set size : {len(train):10} ({train_test_split[0]:.0%})",
-          f"Validation set size : {len(test):10} ({train_test_split[1]:.0%})",
+          f"Training   set size : {len(train):10})",
+          f"Validation set size : {len(test):10})",
           f"Total               : {len(data):10}",
           sep="\n", end="\n\n")
 
@@ -115,11 +120,13 @@ def main():
 
     trainLoader = DataLoader(train, shuffle=True,
                              batch_size=args.batch_size,
-                             num_workers=args.num_workers)
+                             num_workers=args.num_workers,
+                             pin_memory=True)
 
     testLoader = DataLoader(test, shuffle=True,
                             batch_size=args.batch_size,
-                            num_workers=args.num_workers)
+                            num_workers=args.num_workers,
+                            pin_memory=True)
 
     net = Net().to(args.device)
     print(net, end="\n\n")
