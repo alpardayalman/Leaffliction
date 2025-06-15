@@ -5,7 +5,8 @@ from PIL import Image
 import numpy as np
 import os
 import pandas as pd
-from tqdm import tqdm 
+from tqdm import tqdm
+
 
 model = models.resnet18(pretrained=True)
 model = model.eval()  # Set to evaluation mode
@@ -54,4 +55,3 @@ df = pd.DataFrame({
 })
 
 df.to_csv('image_embeddings.csv', index=False)
-

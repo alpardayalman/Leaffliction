@@ -3,6 +3,7 @@ import sys
 import matplotlib.pyplot as plt
 from collections import Counter
 
+
 def analyze_directory(directory_path):
     if not os.path.exists(directory_path):
         print(f"Directory {directory_path} does not exist.")
@@ -15,6 +16,7 @@ def analyze_directory(directory_path):
             class_counts[plant_type] += len(files)
 
     return class_counts
+
 
 def generate_charts(class_counts, directory_name):
     labels = class_counts.keys()
@@ -38,6 +40,7 @@ def main(directory_path):
     directory_name = os.path.basename(directory_path)
     class_counts = analyze_directory(directory_path)
     generate_charts(class_counts, directory_name)
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
